@@ -25,6 +25,16 @@ function gameIsValid(data) {
     return true;
 }
 
+function gameAllReadyExists({ name, releaseDate }) {
+    // Solution possible : 
+    // - games.filter(...).length > 0
+    // - games.find(...) !== null
+    // - games.findIndex(...) > 0
+    // - games.some(...)
+
+    return games.some(g => g.name === name && g.releaseDate === releaseDate);
+};
+
 const gameController = {
 
     getById: (req, res) => {
@@ -52,6 +62,12 @@ const gameController = {
         // Validation des données
         if (!gameIsValid(req.body)) {
             res.sendStatus(422);
+            return;
+        }
+
+        // Vérification de doublon
+        if (gameAllReadyExists(req.body)) {
+            res.status(409).json({ error: 'Le jeu exists déjà !' });
             return;
         }
 
@@ -85,6 +101,15 @@ const gameController = {
         const gameIndex = games.findIndex(g => g.id === id);
         if (gameIndex < 0) {
             res.sendStatus(404);
+            return;
+        }
+
+        // Vérification de doublon
+        const originalGameName = games[gameIndex].name;
+        const originalGameReleaseDate = games[gameIndex].releaseDate;
+
+        if ((originalGameName !== req.body.name  || originalGameReleaseDate !== req.body.releaseDate)  && gameAllReadyExists(req.body)) {
+            res.status(409).json({ error: 'Le jeu exists déjà !' });
             return;
         }
 
