@@ -1,5 +1,6 @@
 import express from 'express';
 import morgan from 'morgan';
+import { apiRouter } from './routers/index.js';
 
 //! Variable d'environnement
 const { NODE_ENV, PORT } = process.env;
@@ -9,8 +10,10 @@ const app = express();
 
 //! App Middlware
 app.use(morgan('tiny'));
+app.use(express.json());
 
-//TODO Routing
+//! Routing
+app.use('/api', apiRouter);
 
 //! Démarrage de la Web API
 app.listen(PORT, (error) => {
