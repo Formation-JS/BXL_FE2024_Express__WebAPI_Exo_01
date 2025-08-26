@@ -1,29 +1,29 @@
 import games from './../data/game.json' with { type: 'json' };
+import fs from 'node:fs/promises';
 let lastId = Math.max(...games.map(g => g.id));
 
 function gameIsValid(data) {
 
     // Champs texte
-    if(!data.name?.trim() || !data.shortDesc?.trim() || !data.releaseDate?.trim()) {
+    if (!data.name?.trim() || !data.shortDesc?.trim() || !data.releaseDate?.trim()) {
         return false;
     }
 
     // Genres
-    if(!Array.isArray(data.genres) || data.genres.length < 1) {
+    if (!Array.isArray(data.genres) || data.genres.length < 1) {
         return false;
     }
 
     // Mode
     const rulesRegex = /^(?!solo$)(?!multi$).+/i;
 
-     if(!Array.isArray(data.mode) || data.mode.length < 1 || data.mode.some(m => rulesRegex.test(m))) {
+    if (!Array.isArray(data.mode) || data.mode.length < 1 || data.mode.some(m => rulesRegex.test(m))) {
         return false;
     }
 
     // Objet validé !
     return true;
-} 
-
+}
 
 const gameController = {
 
@@ -43,14 +43,14 @@ const gameController = {
         const { offset, limit } = req.pagination;
 
         const result = games.slice(offset, offset + limit)
-                            .map(g => ({ id: g.id, name: g.name, shortDesc: g.shortDesc}));
+            .map(g => ({ id: g.id, name: g.name, shortDesc: g.shortDesc }));
 
         res.status(200).json(result);
     },
 
     insert: (req, res) => {
         // Validation des données
-        if(!gameIsValid(req.body)) {
+        if (!gameIsValid(req.body)) {
             res.sendStatus(422);
             return;
         }
@@ -68,22 +68,22 @@ const gameController = {
 
         // Cloture de la requete
         res.status(201)
-           .location(`/api/game/${gameAdded.id}`)
-           .json(gameAdded);
+            .location(`/api/game/${gameAdded.id}`)
+            .json(gameAdded);
     },
 
     update: (req, res) => {
         const id = parseInt(req.params.id);
-                
+
         // Validation des données
-        if(!gameIsValid(req.body)) {
+        if (!gameIsValid(req.body)) {
             res.sendStatus(422);
             return;
         }
 
         // Recherche du jeu
         const gameIndex = games.findIndex(g => g.id === id);
-        if(gameIndex < 0) {
+        if (gameIndex < 0) {
             res.sendStatus(404);
             return;
         }
@@ -103,12 +103,34 @@ const gameController = {
         const id = parseInt(req.params.id);
 
         const gameIndex = games.findIndex(g => g.id === id);
-        if(gameIndex < 0) {
+        if (gameIndex < 0) {
             res.sendStatus(404);
             return;
         }
 
         games.splice(gameIndex, 1);
+        res.sendStatus(204);
+    },
+
+    uploadCover: async (req, res) => {
+        // Récuperation des informations de la requete
+        const id = parseInt(req.params.id);
+        const cover = req.file;
+
+        await (new Promise(resolve => setTimeout(resolve, 2000)));
+
+        // Rechercher le jeu
+        const gameIndex = games.findIndex(g => g.id === id);
+        if (gameIndex < 0) {
+            await fs.unlink(req.file.path);
+            res.sendStatus(404);
+            return;
+        }
+
+        // Mise à jour de la cover du jeu
+        games[gameIndex].cover = cover.path;
+
+        // Cloture de la requete
         res.sendStatus(204);
     }
 };

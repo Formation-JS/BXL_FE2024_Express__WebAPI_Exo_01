@@ -12,6 +12,9 @@ const app = express();
 app.use(morgan('tiny'));
 app.use(express.json());
 
+//! Fichier « public »
+app.use('/public', express.static('public'));
+
 //! Routing
 app.use('/api', apiRouter);
 
