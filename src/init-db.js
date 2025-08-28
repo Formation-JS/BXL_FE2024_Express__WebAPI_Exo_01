@@ -1,6 +1,8 @@
+import chalk from 'chalk';
 import db from './models/index.js';
 
 try {
+    console.log(chalk.blueBright('Authentification...'));
     await db.sequelize.authenticate();
 
     console.log(chalk.blueBright('Initialisation de la DB'));
@@ -29,5 +31,6 @@ try {
     console.log(chalk.greenBright('L\'initialisation de la DB est terminé avec succes !'));
 }
 catch (error) {
+    console.log(chalk.redBright('L\'initialisation de la DB a échoué !'));
     console.log(error);
 }

@@ -1,9 +1,7 @@
+import { Sequelize } from "sequelize";
 import gameModel from "./game.model.js";
 import gameModeModel from "./gameMode.model.js";
 import genreModel from "./genre.model.js";
-
-const { Sequelize } = require("sequelize");
-
 
 //! Variable d'environnement
 const { DB_DATABASE, DB_HOST, DB_PORT, DB_USERNAME, DB_PASSWORD } = process.env;

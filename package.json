@@ -13,9 +13,11 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env src/app.js",
     "dev": "nodemon --env-file=.env src/app.js",
+    "init-db": "node --env-file=.env src/init-db.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "chalk": "^5.6.0",
     "express": "^5.1.0",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
