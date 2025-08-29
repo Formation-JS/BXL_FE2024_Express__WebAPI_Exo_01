@@ -25,15 +25,24 @@ function gameIsValid(data) {
     return true;
 }
 
-function gameAllReadyExists({ name, releaseDate }) {
-    // Solution possible : 
-    // - games.filter(...).length > 0
-    // - games.find(...) !== null
-    // - games.findIndex(...) > 0
-    // - games.some(...)
+const gameMapper = {
+    toCompleteDTO : (game) => ({
+        id: game.id,
+        name: game.name,
+        desc: game.desc,
+        shortDesc: game.shortDesc,
+        releaseDate: game.releaseDate.toISOString(),
+        cover: game.cover,
+        genres: game.genres?.map(g => g.name),
+        mode: game.mode?.map(m => m.name),
+    }),
 
-    return games.some(g => g.name === name && g.releaseDate === releaseDate);
-};
+    toShortDTO : (game) => ({
+        id: game.id,
+        name: game.name,
+        shortDesc: game.shortDesc,
+    })
+}
 
 const gameController = {
 
