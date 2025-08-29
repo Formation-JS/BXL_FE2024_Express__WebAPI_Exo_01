@@ -25,6 +25,8 @@ try {
             { name: 'Aventure' }
         ],
         cover: '/public/cover/zelda-botw.png',
+    }, {
+        include: db.Genre
     });
     await game1.addMode(solo);
 
@@ -34,3 +36,5 @@ catch (error) {
     console.log(chalk.redBright('L\'initialisation de la DB a échoué !'));
     console.log(error);
 }
+
+process.exit(0);
