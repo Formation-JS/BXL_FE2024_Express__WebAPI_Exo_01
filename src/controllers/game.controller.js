@@ -1,6 +1,5 @@
-import games from './../data/game.json' with { type: 'json' };
+import db from './../models/index.js';
 import fs from 'node:fs/promises';
-let lastId = Math.max(...games.map(g => g.id));
 
 function gameIsValid(data) {
 
@@ -15,9 +14,9 @@ function gameIsValid(data) {
     }
 
     // Mode
-    const rulesRegex = /^(?!solo$)(?!multi$).+/i;
+    const rulesRegex = /^(?!Solo$)(?!Multi$).+/i;
 
-    if (!Array.isArray(data.mode) || data.mode.length < 1 || data.mode.some(m => rulesRegex.test(m))) {
+    if (!Array.isArray(data.modes) || data.modes.length < 1 || data.modes.some(m => rulesRegex.test(m))) {
         return false;
     }
 
@@ -25,49 +24,61 @@ function gameIsValid(data) {
     return true;
 }
 
+async function gameAllReadyExists({ name, releaseDate }) {
+
+    const gameExists = await db.Game.findOne({
+        where: { name, releaseDate }
+    });
+
+    return gameExists !== null;
+};
+
 const gameMapper = {
-    toCompleteDTO : (game) => ({
+    toCompleteDTO: (game) => ({
         id: game.id,
         name: game.name,
         desc: game.desc,
         shortDesc: game.shortDesc,
-        releaseDate: game.releaseDate.toISOString(),
+        releaseDate: new Date(game.releaseDate).toISOString(),
         cover: game.cover,
         genres: game.genres?.map(g => g.name),
-        mode: game.mode?.map(m => m.name),
+        modes: game.modes?.map(m => m.name),
     }),
 
-    toShortDTO : (game) => ({
+    toShortDTO: (game) => ({
         id: game.id,
         name: game.name,
         shortDesc: game.shortDesc,
     })
-}
+};
 
 const gameController = {
 
-    getById: (req, res) => {
+    getById: async (req, res) => {
         const id = parseInt(req.params.id);
-        const game = games.find(g => g.id === id);
+        const game = await db.Game.findByPk(id, {
+            include: [db.Genre, db.Mode]
+        });
 
         if (!game) {
             res.sendStatus(404);
             return;
         }
 
-        res.status(200).json(game);
+        res.status(200).json(gameMapper.toCompleteDTO(game));
     },
 
-    getAll: (req, res) => {
+    getAll: async (req, res) => {
         const { offset, limit } = req.pagination;
 
-        const result = games.slice(offset, offset + limit)
-            .map(g => ({ id: g.id, name: g.name, shortDesc: g.shortDesc }));
+        const games = await db.Game.findAll({
+            offset, limit
+        });
 
-        res.status(200).json(result);
+        res.status(200).json(games.map(gameMapper.toShortDTO));
     },
 
-    insert: (req, res) => {
+    insert: async (req, res) => {
         // Validation des données
         if (!gameIsValid(req.body)) {
             res.sendStatus(422);
@@ -75,29 +86,45 @@ const gameController = {
         }
 
         // Vérification de doublon
-        if (gameAllReadyExists(req.body)) {
+        if (await gameAllReadyExists(req.body)) {
             res.status(409).json({ error: 'Le jeu exists déjà !' });
             return;
         }
 
-        // Incrementation de FakeId
-        lastId++;
-
         // Ajout des données
-        const gameAdded = {
-            ...req.body,
-            id: lastId,
-            cover: null
-        };
-        games.push(gameAdded);
+        // - Jeu
+        const gameToAdd = await db.Game.create({
+            name: req.body.name.trim(),
+            desc: req.body.desc?.trim(),
+            shortDesc: req.body.shortDesc.trim(),
+            releaseDate: new Date(req.body.releaseDate),
+            cover: req.body.cover,
+        });
+        // - Mode
+        const selectedMode = await db.Mode.findAll({
+            where: { name: req.body.modes }
+        });
+        await gameToAdd.addMode(selectedMode);
+        // - Genre
+        for (const genre of req.body.genres) {
+            const [genreDB] = await db.Genre.findOrCreate({
+                where: { name: genre }
+            });
+            await gameToAdd.addGenre(genreDB);
+        }
+
+        // Récuperation de l'objet en DB
+        const gameAdded = await db.Game.findByPk(gameToAdd.id, {
+            include: [db.Genre, db.Mode]
+        });
 
         // Cloture de la requete
         res.status(201)
             .location(`/api/game/${gameAdded.id}`)
-            .json(gameAdded);
+            .json(gameMapper.toCompleteDTO(gameAdded));
     },
 
-    update: (req, res) => {
+    update: async (req, res) => {
         const id = parseInt(req.params.id);
 
         // Validation des données
@@ -107,42 +134,63 @@ const gameController = {
         }
 
         // Recherche du jeu
-        const gameIndex = games.findIndex(g => g.id === id);
-        if (gameIndex < 0) {
+        const gameToUpdate = await db.Game.findByPk(id, {
+            include: [db.Genre, db.Mode]
+        });
+
+        // Si aucun jeu, erreur "not found"
+        if (!gameToUpdate) {
             res.sendStatus(404);
             return;
         }
 
         // Vérification de doublon
-        const originalGameName = games[gameIndex].name;
-        const originalGameReleaseDate = games[gameIndex].releaseDate;
+        const originalGameName = gameToUpdate.name;
+        const originalGameReleaseDate = gameToUpdate.releaseDate;
 
-        if ((originalGameName !== req.body.name  || originalGameReleaseDate !== req.body.releaseDate)  && gameAllReadyExists(req.body)) {
+        if ((originalGameName !== req.body.name || originalGameReleaseDate !== req.body.releaseDate) && gameAllReadyExists(req.body)) {
             res.status(409).json({ error: 'Le jeu exists déjà !' });
             return;
         }
 
         // Mise à jours
-        games[gameIndex].name = req.body.name;
-        games[gameIndex].desc = req.body.desc;
-        games[gameIndex].shortDesc = req.body.shortDesc;
-        games[gameIndex].releaseDate = req.body.releaseDate;
-        games[gameIndex].genres = req.body.genres;
-        games[gameIndex].mode = req.body.mode;
+        // - Jeu
+        await gameToUpdate.update({
+            name: req.body.name,
+            desc: req.body.desc,
+            shortDesc: req.body.shortDesc,
+            releaseDate: req.body.releaseDate,
+        });
+        // - Mode (Modify)
+        const selectedMode = await db.Mode.findAll({
+            where: { name: req.body.modes }
+        });
+        await gameToUpdate.setModes(selectedMode);
+        // - Genre (Remove)
+        const genreToRemove = gameToUpdate.genres.filter(g => !req.body.genres.includes(g.name));
+        await gameToUpdate.removeGenre(genreToRemove);
+        // - Genre (Add)
+        const genreToAdd = req.body.genres.filter(g => !gameToUpdate.genres.some(gdb => gdb.name === g));
+        for (const genre of genreToAdd) {
+            const [genreDB] = await db.Genre.findOrCreate({
+                where: { name: genre }
+            });
+            await gameToUpdate.addGenre(genreDB);
+        }
 
         res.sendStatus(204);
     },
 
-    delete: (req, res) => {
+    delete: async (req, res) => {
         const id = parseInt(req.params.id);
 
-        const gameIndex = games.findIndex(g => g.id === id);
-        if (gameIndex < 0) {
+        const gameToRemove = await db.Game.findByPk(id);
+        if (!gameToRemove) {
             res.sendStatus(404);
             return;
         }
 
-        games.splice(gameIndex, 1);
+        await gameToRemove.destroy();
         res.sendStatus(204);
     },
 
@@ -151,18 +199,20 @@ const gameController = {
         const id = parseInt(req.params.id);
         const cover = req.file;
 
-        await (new Promise(resolve => setTimeout(resolve, 2000)));
+        // Fausse latence pour la démo (Ne pas faire en prod :p)
+        await (new Promise(resolve => setTimeout(resolve, 500)));
 
         // Rechercher le jeu
-        const gameIndex = games.findIndex(g => g.id === id);
-        if (gameIndex < 0) {
+        const gameForCover = await db.Game.findByPk(id);
+        if (!gameForCover) {
             await fs.unlink(req.file.path);
             res.sendStatus(404);
             return;
         }
 
         // Mise à jour de la cover du jeu
-        games[gameIndex].cover = cover.path;
+        gameForCover.cover = cover.path;
+        await gameForCover.save();
 
         // Cloture de la requete
         res.sendStatus(204);
